@@ -1,0 +1,248 @@
+---
+title: "Final Project - Maricopa County General Election Analysis"
+author: "Pablo Gomez"
+date: "2022-11-30"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library('dplyr')
+library('tidyr')
+library('ggplot2')
+library('stringr')
+library('ggiraph')
+
+data_2022 <- read.csv('2022_Maricopa_Results.csv') %>%
+  mutate(shareVote = Votes/Turnout)%>%
+  select(ContestName, PrecinctId, PrecinctName, PrecinctRegistered, PrecinctTurnout, PrecinctTurnoutPerc, CandidateName, CandidateAffiliation, Votes, Turnout_EARLY.VOTE,Votes_EARLY.VOTE,
+         Turnout_ELECTION.DAY, shareVote)%>%
+  rename_all(~str_c(.,"2022",sep = '_'))
+
+data_2020 <- read.csv('2020_Maricopa_Results.csv')%>%
+  mutate(shareVote = Votes/Turnout)%>%
+  select(ContestName, PrecinctId, PrecinctName, PrecinctRegistered, PrecinctTurnout, PrecinctTurnoutPerc, CandidateName, CandidateAffiliation, Votes, Turnout_EARLY.VOTE,Votes_EARLY.VOTE,
+         Turnout_ELECTION.DAY, shareVote)%>%
+  rename_all(~str_c(.,"2020",sep = '_'))%>%
+  mutate(ContestName_2020 = str_replace(ContestName_2020,'US Senate-Term Expires  JANUARY 3, 2023','US Senate'))
+
+completeData <- data_2022 %>%
+  left_join(data_2020, by = c('ContestName_2022'='ContestName_2020','PrecinctName_2022'='PrecinctName_2020','CandidateAffiliation_2022'='CandidateAffiliation_2020'))
+
+my_theme <- theme(legend.position = 'bottom',axis.ticks=element_blank(),
+      panel.background = element_rect(fill = 'white',colour = 'black'),
+      panel.grid.major = element_line(colour = 'grey'),
+      legend.key.width = unit(.6,'cm'))
+
+turnout22 <- data_2022 %>%
+  group_by(PrecinctName_2022,PrecinctRegistered_2022,PrecinctTurnout_2022)%>%
+  summarise(mean(PrecinctTurnout_2022))
+
+turnout20 <- data_2020%>%
+  group_by(PrecinctName_2020,PrecinctRegistered_2020,PrecinctTurnout_2020)%>%
+  summarise(mean(PrecinctTurnout_2020))
+
+Dem2022 <- data_2022 %>%
+  group_by(CandidateAffiliation_2022,PrecinctName_2022,PrecinctTurnoutPerc_2022)%>%
+  summarise(Vote_share = sum(Votes_2022)/sum(PrecinctTurnout_2022))%>%
+  filter(CandidateAffiliation_2022 == 'DEM')
+
+split22 <- data_2022 %>%
+  filter(CandidateAffiliation_2022 == 'DEM'|CandidateAffiliation_2022=='REP',
+         ContestName_2022 == 'US Senate'|ContestName_2022 == 'Governor')%>%
+  group_by(CandidateName_2022,ContestName_2022,CandidateAffiliation_2022)%>%
+  summarise(Total_Vote = sum(Votes_2022)/sum(PrecinctTurnout_2022),sum(Votes_2022))%>%
+  rename_all(~str_remove_all(.,'_2022'))%>%
+  mutate(year = 2022)
+
+knitr::opts_chunk$set(echo = FALSE,warning = FALSE,message = FALSE)
+```
+
+## Literature Review
+
+I look to dive into an analysis of the 2022 Midterm results. In particular from my home place of Maricopa County. In particular, this region of the United States is of significance since the County is considered one of the most consequential ones in the country which holds great influence on Arizona statewide elections. This county is argued to be the most contested one in the whole nation in recent years. Both the Republicans and Democrats have invested a significant amount of resources to win over the county. In this Analysis, I will look to investigate and further research various narratives or commonly held beliefs about elections overall historically, and in the current political climate of the United States. Some of these commonly held narratives are:
+
+#### 1. Turnout significantly decreases during Midterms, in particular for Democratic voters. In addition, does more turnout equal more votes for the Democratic Party
+
+Before having researched the topic, I believe that historically, Midterm election turnout has been significantly less than during the Presidential election. I believe it to be maybe about a third less overall compared to Presidential election years. The real question is why is that? I believe it to be overall fewer media or cultural attention these elections have. These elections typically don't incorporate low-propensity voters, who typically vote only for President. These low-propensity voters are typically associated to vote in majority cases for Democratic candidates. The belief is that the higher the overall turnout the higher these trends benefit the Democratic Party electorally. Since the Democrat's election strategy is to turn out low-propensity voters, the narrative would be believed to be true.    
+
+With further investigation using an article written by Franklin D. Gilliam, Jr., https://www.jstor.org/stable/440035, a multivariate model was created to further understand what factors influence the most to voter turnout in any given election. Factors such as election competitiveness, resources allocated, and general geographical demographics are significant elements of voter turnout. Since in midterm elections, historically, spending has been less compared to Presidential elections and congressional seats are becoming less and less competitive due to Gerrymandering, it would make sense voter turnout would be less in Midterm elections. A journal published by Bernard Grofman, https://link.springer.com/article/10.1023/A:1018397327176, talks about the narrative over higher turnout benefits the Democratic Party and mentions various arguments that rebut this simplified argument. One argument is that non-voters are not more likely to vote for Democrats but instead jump on the bandwagon of the perceived winning candidate.  
+
+#### 2. In this increasingly partisan environment, the decreasing of split-ticket voting and how it is viewed as a rarity at this point
+
+Intuitively by referencing previous elections, political partisanship and polarization in the United States have been at an all-time high. Voters tend now more and more to vote straight party line every year, thus making the pool of swing voters less and less. As a result, the action of split-ticket voting has decreased and decreased over time. Split-ticket voting is when a voter casts their selection amongst both parties in different elections.  
+ 
+Barry Burden writing a Comparative Analysis of Split-Ticket voting itself, https://www.sciencedirect.com/science/article/pii/S0261379408000863 brings about various reasons why this phenomenon occurs. One reason is to bring about policy/ideological balance in the Governing institutions. A more sincere strategy is looking at the individual candidate's assessment for which the voters decide to cast their vote. 
+
+#### 3. The crucial and significant effects third-party candidacies, in particular, Libertarian Party candidates have had on Republican candidacy results
+
+In most recent electoral history in the United States, especially since the integration of Donald Trump into the mainstream of American politics, third parties, especially libertarian Party ones have come as spoilers specifically for Republican candidates. Since much of the ideological values intersect amongst both camps, intuitively it makes sense they both share voters. The real question is to how much of an extent have they become spoilers? Is the Libertarian candidate variable so significant that it has been detrimental to the Republican Party's success?
+
+Jonathan Cervas, https://www.cambridge.org/core/journals/ps-political-science-and-politics/article/why-donald-trump-should-be-a-fervent-advocate-of-using-rankedchoice-voting-in-2024/75B3DD121F1B07CDA0DDFFD878B2DD7C, on why Donald Trump should advocate for Rank-choice voting, describes the effect third-party candidates have affected elections, especially the Libertarians. Cervas confirms Republicans would gain a 2-1 majority over Democrats if Libertarians had to choose from one of the parties. Cervas contributes states Trump's loss of Arizona and Georgia to the Libertarian spoiler. Third-Parties have negatively impacted the Republican party more than the Democrats in recent elections. 
+
+## Data Collection
+
+Looking at how the data was collected for this analysis, I used Maricopa County's results publicly available results from the Maricopa County Elections Department website. The website contains results from previous elections, especially the 2020 General Election that I will use in addition to the 2022 Midterm Election. These files are available in .txt format and include several variables. Some of the variables include:
+
+- Contest Name: Specific Contest (ex.-Presidential Electors, Governor, US Senate)
+- Precinct Name: All various precincts in Maricopa County
+- Precinct Registered: Number of registered voters in a given precinct
+- Precinct Turnout: Number of actual voters who voted in the given precinct
+- Precinct Turnout Percentage: Percentage of voters who voted in the given precinct
+- Candidate Name: Name of Candidate (ex.- Trump, Biden, Kelly, Masters)
+- Candidate Affiliation: Political Party they align with (ex. Dem, Rep, LBT)
+- Votes: Number of Votes the respective candidate received in the respective precinct
+
+Drawbacks I potentially see from using this data set are the lack of other various necessary or relevant information like Registered voter's party affiliation in a given precinct, or vote share of the given candidate in the given precinct. Just not having the ability to control or calculate the variables somewhat limits you to the type of analysis one can have on any given data set.
+
+## Pre-processing/munging
+
+Necessary steps used to do analysis:
+
+1. Import necessary R packages such as ggplot2, tidyr, dplyr, and stringr for more dynamic data manipulation
+2. Import relevant data sets: 2022 and 2020 Maricopa County General Election results using the `read.table` function with parameters that delimit data cells using the tab
+3. Clean up the data set by calculating the results of a given candidate for their vote share represented in decimal percent using the `mutate` function
+4. Using the `select` function of the same data set, remove unnecessary columns used for the analysis
+5. Rename variables to respective election year to facilitate the joining of data in the next step for election comparison analysis using the `rename_all` function
+6. Join both data sets using the `left_join` function based on Contest Name, Precinct Name, and Candidate Affiliation for a party, precinct, and contest comparison analysis
+
+
+## Analysis
+
+#### Turnout Analysis
+
+First looking at the analysis regarding turnout in Maricopa County General elections. The first argument or hypothesis we will look to analyze is regarding voter turnout in Presidential election years vs voter turnout in non-Presidential years, specifically the midterms. First, we will find the overall voter turnout of the 2022 election by using summary statistics. We find the voter turnout of the 2022 general election to be `r round(sum(turnout22$PrecinctTurnout_2022)/sum(turnout22$PrecinctRegistered_2022)*100, digits = 2)`% of registered voters. We find the voter turnout of the 2020 general election to be `r round(sum(turnout20$PrecinctTurnout_2020)/sum(turnout20$PrecinctRegistered_2020)*100, digits = 2)`% of registered voters. On that analysis, we see a higher turnout in the Presidential year compared to the Midterms. Specifically, we find an `r round((round(sum(turnout20$PrecinctTurnout_2020)/sum(turnout20$PrecinctRegistered_2020)*100, digits = 2)-round(sum(turnout22$PrecinctTurnout_2022)/sum(turnout22$PrecinctRegistered_2022)*100,digits = 2))/(round(sum(turnout22$PrecinctTurnout_2022)/sum(turnout22$PrecinctRegistered_2022)*100,digits = 2))*100,digits = 2)`% decrease of voter turnout from the 2020 General election to the 2022 Midterm election.
+
+Looking at the second argument we find if Democrats perform when there is a higher turnout. We see if there is a correlation between the increase in turnout and an increase in support of the Democrats. Using the data we have we will look at a precinct-by-precinct analysis by how well Democrats performed in a given percent concerning as well as how much that precinct's turnout was. In the graph below you will see the plotted on the x-axis, the percentage of how many voters turn out to vote plotted respectively how much percent of the vote the Democrats received in the given precinct. Hover over each observation to see which precinct and how many votes the Democrat candidate received.
+
+
+```{r,fig.align='center'}
+viz_1 <- data_2022 %>%
+  group_by(CandidateAffiliation_2022,PrecinctName_2022,PrecinctTurnoutPerc_2022)%>%
+  summarise(Vote_share = sum(Votes_2022)/sum(PrecinctTurnout_2022))%>%
+  filter(CandidateAffiliation_2022 == 'DEM') %>%
+  mutate(PrecinctTurnoutPerc_2022 = round(PrecinctTurnoutPerc_2022 *100,digits = 2),
+         Vote_share = round(Vote_share*100, digits = 2))%>%
+  ggplot(aes(PrecinctTurnoutPerc_2022, Vote_share,data_id = PrecinctName_2022,
+            tooltip = paste('Precinct:',PrecinctName_2022, '\n', 'Democrats Share:', Vote_share,'%')))+
+  geom_point_interactive() + 
+  labs(x = 'Precinct Turnout(%)', y = 'Democrats Share of the Vote(%)', title = 'Precinct Turnout vs Democrats Share of the Vote in 2022 Midterm Election')+
+  my_theme
+
+girafe(ggobj = viz_1, width_svg = 10,height_svg = 6)
+
+
+```
+
+We see somewhat of a trend in the data from the graph above, that as Precinct Turnout increases the Democrat's Share of the Vote decreases. It is not clear how strong this trend is so we will measure the magnitude by finding the correlation coefficient between the Turnout and share of the vote coefficient. Using the `cor` function we find the correlation coefficient between the variables to be `r round(cor(Dem2022$PrecinctTurnoutPerc_2022,Dem2022$Vote_share,use = 'complete.obs'),digits = 2)`. The correlation coefficient we find is moderate in strength in a negative manner. 
+
+#### Split-ticket analysis
+
+The second analysis we look into is the strength of Split-Ticket or more or less the relevance of this voting action. How partisan have voters become especially in a highly contested county like Maricopa? In the visualization below, we see the plotting of the splits regarding the respective party's share of the vote and their candidate. The analysis is also split for the year to add further election context and extra sample size. In the results, of the eye test, we see strong parallel results of the respective candidates for their parties. We see an average variance of `r round((abs(49.81-50.94)+abs(47.1-47.65)+abs(50.57-51.8)+abs(48.17-45.46))/4,digits=2)`% from voting the party line. The data shows how partisan elections have become for the past two election cycles that voting for different parties is practically non-existent.
+
+```{r,fig.align='center'}
+
+data <- data_2020 %>%
+  filter(CandidateAffiliation_2020 == 'DEM'|CandidateAffiliation_2020=='REP',
+         ContestName_2020 == 'US Senate'|ContestName_2020 == 'Presidential Electors')%>%
+  group_by(CandidateName_2020,ContestName_2020,CandidateAffiliation_2020)%>%
+  summarise(Total_Vote = sum(Votes_2020)/sum(PrecinctTurnout_2020))%>%
+  rename_all(~str_remove_all(.,'_2020'))%>%
+  mutate(year=2020)%>%
+  bind_rows(split22)%>%
+  mutate(Total_Vote = round(Total_Vote*100,2))%>%
+  ggplot(aes(CandidateName, Total_Vote,tooltip = paste('Candidate:',CandidateName, '\n', 'Vote Share:', Total_Vote,'%')))+
+  geom_col_interactive(aes(fill = CandidateAffiliation)) + 
+  scale_fill_manual_interactive(values = c('blue','red'))+facet_wrap(vars(year,CandidateAffiliation), scales = 'free',labeller = labeller(CandidateAffiliation = c(DEM = 'Democrats',REP = 'Republicans'),
+                                                                                                           year = c('2022' = 'Election Year: 2022',
+                                                                                                                    '2020' = 'Election Year: 2020')))+
+  guides(fill = 'none')+
+  my_theme+
+  labs(x = 'Candidate Name',y = 'Percentage of the Vote(%)',title = 'Split-Ticket Comparison')
+
+girafe(ggobj = data,height_svg = 4)
+
+```
+
+#### Libertarian Party Influence
+
+Looking at our last analysis question, we see how significant a third-party spoiler is, specifically the Libertarian candidate. We will look at the 2022 US Senate results for the state of Arizona with candidates Mark Kelly, Blake Masters, and Marc J. Victor. The spoiler in theory is Victor of the Libertarian party, who many of his voters took votes away from the Republican candidate Blake Masters. We see in the visualization below, the actual results on the left taking into regard Victor's vote. We see that Mark Kelly beats Blake Masters by about 6 points. Now taking into account Jonathan Cerva's research that on average 2/3 of people who vote for the Libertarian candidate would swing to the Republican Candidate and 1/3 to the Democratic candidate, we see on the right in the visualization, the transformation. Now as a result of Kelly's lead over Masters just under 5 points. Looking more into the analysis we find an average of `r data_2022%>%
+  filter(CandidateAffiliation_2022 == 'LBT',ContestName_2022 == 'US Senate')%>%
+  summarise(round(sum(Votes_2022,na.rm = TRUE)/length(unique(PrecinctName_2022))))
+
+` 
+votes for Victor for each precinct. That significant swing of 1.5% to Masters takes about 21 votes per precinct as a result. 
+
+```{r,fig.align='center'}
+libt <- data_2022%>%
+  filter(CandidateAffiliation_2022 == 'LBT',ContestName_2022 == 'US Senate')%>%
+  group_by(CandidateName_2022)%>%
+  summarise(libt = sum(Votes_2022)/sum(PrecinctTurnout_2022))
+
+libertarian <- data_2022%>%
+  filter(CandidateAffiliation_2022 == 'REP'|CandidateAffiliation_2022 =='DEM'|CandidateAffiliation_2022 == 'LBT',ContestName_2022=='US Senate')%>%
+  group_by(CandidateName_2022)%>%
+  summarise(actual = sum(Votes_2022)/sum(PrecinctTurnout_2022))
+
+facet_effect <- c(Actual = 'Official Final Results',After = 'Results taking Cervas Libertarian Affect')
+candidate_color <- c('KELLY, MARK'='blue', 'MASTERS, BLAKE'='red','VICTOR, MARC J.' = 'orange')
+
+viz3 <- data_2022%>%
+  mutate(libt = libt$libt)%>%
+  filter(CandidateAffiliation_2022 =='REP'|CandidateAffiliation_2022=='DEM',ContestName_2022=='US Senate')%>%
+  group_by(CandidateName_2022,CandidateAffiliation_2022,libt)%>%
+  summarise(actual = (sum(Votes_2022)/sum(PrecinctTurnout_2022)))%>%
+  mutate(actual = actual+ifelse(CandidateAffiliation_2022=='REP',(2/3)*libt,(1/3)*libt))%>%
+  mutate(CandidateName_2022 = ifelse(CandidateName_2022 == 'KELLY, MARK', 'KELLY, MARK_lbt','MASTERS, BLAKE_lbt'))%>%
+  bind_rows(libertarian)%>%
+  mutate(actual = actual*100)%>%
+  mutate(transform = ifelse(str_ends(CandidateName_2022,'_lbt'),'After','Actual'))%>%
+  mutate(CandidateName_2022 = str_remove(CandidateName_2022,'_lbt'))%>%
+  mutate(actual = round(actual, digits = 2))%>%
+  ggplot(aes(CandidateName_2022,actual, tooltip = paste(CandidateName_2022 ,':',actual,'%')))+
+  geom_col_interactive(aes(fill = CandidateName_2022))+
+  facet_wrap(vars(transform),scales = 'free',labeller = labeller(transform = facet_effect))+
+  scale_fill_manual_interactive(values = candidate_color)+
+  labs(title = '2022 US Senate Analysis with Libertarian affect',x = 'US Senate Candidates',y = 'Percent of Vote Share(%)')+
+  guides(fill = 'none')+
+  my_theme
+
+girafe(ggobj = viz3, width_svg = 8, height_svg = 5)
+```
+
+## Interpretation
+
+#### Turnout Interpretation
+
+Before analyzing the turnout results concerning election year comparison and Democratic party performance, we find some of the hypotheses claimed, in the beginning, to be true and some to be false. Initially, I held the belief that midterm turnout would be less than the Presidential election year. Comparing the Maricopa County election results from the 2022 midterms to the 2020 General election, we found that the claim to be true at an `r round((round(sum(turnout20$PrecinctTurnout_2020)/sum(turnout20$PrecinctRegistered_2020)*100,digits = 2)-round(sum(turnout22$PrecinctTurnout_2022)/sum(turnout22$PrecinctRegistered_2022)*100,digits = 2))/(round(sum(turnout22$PrecinctTurnout_2022)/sum(turnout22$PrecinctRegistered_2022)*100,digits = 2))*100,digits = 2)`% difference. I claimed guessed the turnout difference to be about 1/3, which is relatively close to that of the actual results. Taking the information into account, in this highly competitive election, midterms still had less turnout than the Presidential year. 
+
+Another turnout argument believed in contemporary US politics is that Democrats perform well when turnout is high. The Bernard Grofman journal demonstrates this analysis to not be necessarily true. There are many factors to explain why Democrats are perceived to be winners of highly turnout elections. Looking at the results of the analysis, I compared each precinct's turnout and the respective Democrat's share of the vote. In this visualization, we found that the higher the turnout the less the Democratic share of the vote took place. I calculated the correlation coefficient between the variables and we found a negative moderate strength correlation between the two variables. In a face-front view of the data, it would not seem to be true that as turnout increases, Democratic support increases, on the contrary, it seems the opposite happens. Although a further investigation can be made on demographics that describe further an overall increase in turnout for low-propensity voters. Simply put, high turnout precincts do not necessarily mean high support for the Democrats but rather an analysis over time of how turnout increases and affects Democratic support should be further examined.  
+
+#### Split-Ticket Interpretation
+
+In this analysis, we try to analyze the significance of split-ticket voting. How often does the phenomenon occur and if it greatly affects the overall results of an election? The comparative analysis mentioned earlier describes the many reasons why Split-Ticket voting occurs, especially voters choosing to vote on an individual case candidate by candidate. In the case of the US Senate election contest for Arizona, we see this play out with Mark Kelly seen as a more favorable candidate at the individual level. Incumbency can affect this. In the visualization, we see the results of low deviation from voting the party line, around 1.5% specifically. This took into account the 2022 and 2020 general elections. 
+
+
+#### Libertarian Party Interpretation
+
+Lastly, I analyzed the effect the Libertarian candidate for the US had on the race, specifically for Blake Masters who seems to be negatively affected by the incorporation of Marc J. Victor, the Libertarian candidate, on the ballot. Using Jonathan Cervas's findings on how many Libertarian candidates affect the vote and play as a spoiler in many regards, I display a comparison of the actual results and the potential results that could potentially occur if Victor was not running based on the information Cervas provided. We see in the visualization a 1.5% swing in favor of Blake Masters if it were not Victor in the race. This seemed to affect Masters negatively since he woefully underperformed compared to his party counterweight in Kari Lake.  
+
+## Conclusion 
+
+Overall analyzing elections has many interesting trends to look at since many variables take place when trying to understand voter behavior. Many topics such as turnout and concerning Democratic support, Split-Ticket trends, or third-party spoilers are significant in trying to understand what happens in electoral politics. The literature describes a country that is more and more partisan and less individually analyzing the candidates based on their qualifications. Using the data from the County's election website was interesting in understanding the transparency demonstrated in the electoral processes for these elections. Formatting the data using various R packages helped neatly put all the analysis in order as well.
+
+In a future analysis, I believe it would be relevant to bring about more variables to analyze trends. The data I was given by the County election department was thorough but was limited to just election results. The lack of variables, such as demographics or geographics somewhat limited the analysis to further interpret the data. 
+ 
+
+
+## Bibliography
+
+Cervas, J., & Grofman, B. (2022). Why Donald Trump Should Be a Fervent Advocate of Using Ranked-Choice Voting in 2024. PS: Political Science & Politics, 55(1), 1-6. doi:10.1017/S1049096521001232
+
+Gilliam, F. D. (1985). Influences on Voter Turnout for U. S. House Elections in Non-Presidential Years. Legislative Studies Quarterly, 10(3), 339–351. https://doi.org/10.2307/440035
+
+Grofman, B., Owen, G., & Collet, C. (n.d.). Rethinking the partisan effects of higher turnout: So what's the question? - public choice. SpringerLink. Retrieved November 30, 2022, from https://link.springer.com/article/10.1023/A:1018397327176 
+
+Burden, B. C., & Helmke, G. (2009). The comparative study of split-ticket voting. Electoral Studies, 28(1), 1–7. https://doi.org/10.1016/j.electstud.2008.06.004 
+
+
+
